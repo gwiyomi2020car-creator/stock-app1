@@ -5,8 +5,8 @@ import re
 
 # 頁面基本設定
 st.set_page_config(
-    page_title="全網 50+ 蝦皮秒殺雷達",
-    page_icon="🔥",
+    page_title="全網蝦皮秒殺雷達 (高穩定版)",
+    page_icon="🦐",
     layout="centered"
 )
 
@@ -69,8 +69,8 @@ st.markdown("""
 # --- 頂部 Banner ---
 st.markdown("""
     <div class="app-header">
-        <div class="app-title">🔥 全網 50+ 蝦皮秒殺雷達（高容量聚合版）</div>
-        <div class="app-sub">深度掃描多頁討論區與多個 Telegram 優惠頻道 ‧ 目標解鎖 50+ 商品</div>
+        <div class="app-title">🦐 蝦皮秒殺雷達（高穩定深度掃描版）</div>
+        <div class="app-sub">免除 Telegram 頁面失效問題 ‧ 深度跨頁掃描 PTT 省錢版取得海量商品</div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -81,39 +81,35 @@ def extract_shopee_links(text_or_html):
     found_links = re.findall(r'(https?://[^\s<>"]+)', text_or_html)
     links = []
     for link in found_links:
-        # 擴大涵蓋蝦皮長網址、縮址以及常見的導購短網址
-        if any(domain in link for domain in ["shopee.tw", "shp.ee", "tw.shp.ee", "reurl.cc"]):
+        if any(domain in link for domain in ["shopee.tw", "shp.ee", "tw.shp.ee"]):
             clean_link = link.rstrip('.,;:!?)')
             if clean_link not in links:
                 links.append(clean_link)
     return links[:3]
 
-# --- 1. PTT 深度多頁爬蟲（抓取多頁以累積大量商品） ---
+# --- PTT 深度多頁爬蟲（確保高穩定、抓取大量商品） ---
 @st.cache_data(ttl=300)
 def fetch_deep_ptt_deals():
     headers = {"User-Agent": "Mozilla/5.0", "Cookie": "over18=1"}
     results = []
-    
-    # 爬取 PTT 省錢版最近的 3 個分頁
     base_url = "https://www.ptt.cc/bbs/Lifeismoney/index{}.html"
     
     try:
-        # 先取得最新頁數
         res = requests.get("https://www.ptt.cc/bbs/Lifeismoney/index.html", headers=headers, timeout=6)
         if res.status_code != 200:
             return []
         
         soup = BeautifulSoup(res.text, "html.parser")
-        # 尋找上一頁的連結來推算最新頁碼
         paging_buttons = soup.find_all("a", class_="btn wide")
         prev_page_url = paging_buttons[1]["href"] if len(paging_buttons) > 1 else ""
         match = re.search(r'index(\d+)\.html', prev_page_url)
         
         if match:
             latest_index = int(match.group(1)) + 1
-            pages_to_fetch = range(latest_index, latest_index - 3, -1) # 抓最近 3 頁
+            # 為了確保能拿到足夠多的商品，我們直接抓最近 5 個分頁！
+            pages_to_fetch = range(latest_index, latest_index - 5, -1)
         else:
-            pages_to_fetch = [None] # 備用
+            pages_to_fetch = [None]
             
         for p in pages_to_fetch:
             target_url = base_url.format(p) if p else "https://www.ptt.cc/bbs/Lifeismoney/index.html"
@@ -128,7 +124,6 @@ def fetch_deep_ptt_deals():
                     title = a_tag.get_text().strip()
                     article_url = "https://www.ptt.cc" + a_tag["href"]
                     
-                    # 快速抓取內文連結
                     art_res = requests.get(article_url, headers=headers, timeout=4)
                     if art_res.status_code == 200:
                         art_soup = BeautifulSoup(art_res.text, "html.parser")
@@ -137,7 +132,7 @@ def fetch_deep_ptt_deals():
                             links = extract_shopee_links(str(main_content))
                             if links:
                                 results.append({
-                                    "platform": "PTT 省錢版 (深度)",
+                                    "platform": "PTT 省錢版 (深度掃描)",
                                     "title": title,
                                     "shopee_links": links
                                 })
@@ -145,50 +140,19 @@ def fetch_deep_ptt_deals():
         pass
     return results
 
-# --- 2. 聚合多個 Telegram 優惠頻道 ---
-@st.cache_data(ttl=300)
-def fetch_multiple_telegram_deals():
-    channels = ["ShopeeDealsTW", "goodbuytw", "shopee_discount"] # 多個熱門優惠頻道
-    results = []
-    headers = {"User-Agent": "Mozilla/5.0"}
-    
-    for ch in channels:
-        url = f"https://t.me/s/{ch}"
-        try:
-            res = requests.get(url, headers=headers, timeout=6)
-            if res.status_code == 200:
-                soup = BeautifulSoup(res.text, "html.parser")
-                for msg in soup.find_all("div", class_="tgme_widget_message"):
-                    text_div = msg.find("div", class_="tgme_widget_message_text")
-                    text = text_div.get_text(separator="\n").strip() if text_div else ""
-                    links = extract_shopee_links(text)
-                    if links:
-                        title = text.split("\n")[0][:45] + "..." if text else f"TG 頻道 ({ch}) 優惠"
-                        results.append({
-                            "platform": f"TG 頻道 ({ch})",
-                            "title": title,
-                            "shopee_links": links
-                        })
-        except Exception:
-            continue
-    return results
-
 # --- 畫面主邏輯 ---
-if st.button("🔄 深度重新整理 (解鎖 50+ 商品)", use_container_width=True):
+if st.button("🔄 立即重新整理蝦皮雷達", use_container_width=True):
     st.cache_data.clear()
 
 st.markdown("---")
 
-with st.spinner("正在進行全網深度掃描（跨多頁 PTT ＋ 多個 Telegram 頻道），請稍候約 5~10 秒..."):
-    ptt_deals = fetch_deep_ptt_deals()
-    tg_deals = fetch_multiple_telegram_deals()
-    
-    all_deals = ptt_deals + tg_deals
+with st.spinner("正在進行 PTT 省錢版多頁深度掃描，萃取蝦皮直達與縮址連結中..."):
+    all_deals = fetch_deep_ptt_deals()
 
 if not all_deals:
-    st.warning("⚠️ 目前暫時無法取得足夠資料，請點擊上方按鈕重新整理！")
+    st.warning("⚠️ 目前暫時沒有抓到含有蝦皮連結的文章，請點擊上方按鈕重新整理！")
 else:
-    st.markdown(f"### 🎯 深度掃描完成！成功解鎖共計 **{len(all_deals)}** 筆商品與優惠")
+    st.markdown(f"### 🎯 掃描完成！成功鎖定共計 **{len(all_deals)}** 筆蝦皮優惠好物")
     
     for item in all_deals:
         with st.container():
@@ -200,6 +164,6 @@ else:
             """, unsafe_allow_html=True)
             
             for idx, link in enumerate(item['shopee_links']):
-                st.link_button(f"🔥 點我直接前往搶購 (連結 {idx+1})", link, use_container_width=True)
+                st.link_button(f"🔥 點我直接前往蝦皮搶購 (連結 {idx+1})", link, use_container_width=True)
                 
             st.markdown("<div style='margin-bottom: 14px;'></div>", unsafe_allow_html=True)
