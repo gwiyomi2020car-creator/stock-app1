@@ -1,11 +1,12 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
+import re
 
 # 頁面基本設定
 st.set_page_config(
-    page_title="蝦皮專屬 5 折秒殺雷達",
-    page_icon="🦐",
+    page_title="全網聚合蝦皮秒殺雷達",
+    page_icon="⚡",
     layout="centered"
 )
 
@@ -47,14 +48,32 @@ st.markdown("""
         padding: 16px;
         margin-bottom: 12px;
     }
-    .ptt-title {
+    .deal-title {
         font-size: 16px;
         font-weight: 600;
         color: #38BDF8;
         margin-bottom: 8px;
     }
-    .shopee-badge {
-        background-color: #EE4D2D;
+    .platform-badge-ptt {
+        background-color: #3B82F6;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        margin-right: 6px;
+    }
+    .platform-badge-dcard {
+        background-color: #006AA7;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        margin-right: 6px;
+    }
+    .platform-badge-tg {
+        background-color: #0284C7;
         color: white;
         padding: 2px 8px;
         border-radius: 10px;
@@ -68,95 +87,156 @@ st.markdown("""
 # --- 頂部 Banner ---
 st.markdown("""
     <div class="app-header">
-        <div class="app-title">🦐 蝦皮專屬 5 折破盤秒殺雷達</div>
-        <div class="app-sub">自動過濾全網討論 ‧ 精準鎖定蝦皮（Shopee）商品直達與縮址連結</div>
+        <div class="app-title">⚡ 全網聚合蝦皮秒殺雷達</div>
+        <div class="app-sub">同步 PTT ＋ Dcard ＋ Telegram ‧ 自動精準萃取蝦皮商品直達與縮址連結</div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 爬取 PTT 省錢版並支援蝦皮縮址與長網址 ---
+# 共用過濾蝦皮連結的函式
+def extract_shopee_links(text_or_html):
+    if not text_or_html:
+        return []
+    # 支援標準網址與常見縮址
+    found_links = re.findall(r'(https?://[^\s<>"]+)', text_or_html)
+    shopee_links = []
+    for link in found_links:
+        if any(domain in link for domain in ["shopee.tw", "shp.ee", "tw.shp.ee"]):
+            # 清理結尾可能帶有的標點符號
+            clean_link = link.rstrip('.,;:!?)')
+            if clean_link not in shopee_links:
+                shopee_links.append(clean_link)
+    return shopee_links[:2] # 限制每篇最多取 2 個
+
+# --- 1. 爬取 PTT 省錢版 ---
 @st.cache_data(ttl=300)
-def fetch_shopee_deals():
+def fetch_ptt_deals():
     url = "https://www.ptt.cc/bbs/Lifeismoney/index.html"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-        "Cookie": "over18=1"
-    }
+    headers = {"User-Agent": "Mozilla/5.0", "Cookie": "over18=1"}
+    results = []
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return []
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        articles = soup.find_all("div", class_="r-ent")
-        
-        results = []
-        for art in articles:
-            title_div = art.find("div", class_="title")
-            a_tag = title_div.find("a") if title_div else None
-            
-            if a_tag:
-                title = a_tag.get_text().strip()
-                article_url = "https://www.ptt.cc" + a_tag["href"]
+        res = requests.get(url, headers=headers, timeout=8)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
+            for art in soup.find_all("div", class_="r-ent")[:15]:
+                a_tag = art.find("div", class_="title").find("a") if art.find("div", class_="title") else None
+                if a_tag:
+                    title = a_tag.get_text().strip()
+                    article_url = "https://www.ptt.cc" + a_tag["href"]
+                    # 進入內文抓取
+                    art_res = requests.get(article_url, headers=headers, timeout=5)
+                    if art_res.status_code == 200:
+                        art_soup = BeautifulSoup(art_res.text, "html.parser")
+                        main_content = art_soup.find(id="main-content")
+                        if main_content:
+                            links = extract_shopee_links(str(main_content))
+                            if links:
+                                results.append({
+                                    "platform": "PTT 省錢版",
+                                    "badge_class": "platform-badge-ptt",
+                                    "title": title,
+                                    "source_link": article_url,
+                                    "shopee_links": links
+                                })
+    except Exception:
+        pass
+    return results
+
+# --- 2. 爬取 Dcard 購物板 (透過官方 API) ---
+@st.cache_data(ttl=300)
+def fetch_dcard_deals():
+    url = "https://www.dcard.tw/service/api/v2/forums/buy/posts?limit=20"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    results = []
+    try:
+        res = requests.get(url, headers=headers, timeout=8)
+        if res.status_code == 200:
+            posts = res.json()
+            for post in posts:
+                title = post.get("title", "")
+                post_id = post.get("id")
+                excerpt = post.get("excerpt", "")
                 
-                # 進入內文抓取，擴大支援 shopee.tw、shp.ee、tw.shp.ee
-                shopee_links = fetch_shopee_links_from_article(article_url, headers)
+                # 先從摘要檢查是否有蝦皮連結
+                links = extract_shopee_links(excerpt)
                 
-                if shopee_links:
+                # 如果摘要沒有，去抓詳細內文
+                if not links and post_id:
+                    detail_url = f"https://www.dcard.tw/service/api/v2/posts/{post_id}"
+                    det_res = requests.get(detail_url, headers=headers, timeout=5)
+                    if det_res.status_code == 200:
+                        content = det_res.json().get("content", "")
+                        links = extract_shopee_links(content)
+                
+                if links:
+                    source_url = f"https://www.dcard.cc/f/buy/p/{post_id}"
                     results.append({
+                        "platform": "Dcard 購物板",
+                        "badge_class": "platform-badge-dcard",
                         "title": title,
-                        "ptt_link": article_url,
-                        "shopee_links": shopee_links
+                        "source_link": source_url,
+                        "shopee_links": links
                     })
-        return results[::-1]
     except Exception:
-        return []
+        pass
+    return results
 
-# --- 輔助函式：過濾並萃取蝦皮專屬與縮址網址 ---
-def fetch_shopee_links_from_article(article_url, headers):
+# --- 3. 爬取 Telegram 頻道 ---
+@st.cache_data(ttl=300)
+def fetch_telegram_deals(channel_username):
+    url = f"https://t.me/s/{channel_username}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    results = []
     try:
-        res = requests.get(article_url, headers=headers, timeout=5)
-        if res.status_code != 200:
-            return []
-        
-        soup = BeautifulSoup(res.text, "html.parser")
-        main_content = soup.find(id="main-content")
-        if not main_content:
-            return []
-        
-        shopee_links = []
-        for a in main_content.find_all("a", href=True):
-            href = a["href"]
-            # 同時涵蓋蝦皮標準網址與常見的官方縮址
-            if any(domain in href for domain in ["shopee.tw", "shp.ee", "tw.shp.ee"]):
-                if href not in shopee_links:
-                    shopee_links.append(href)
-                
-        return shopee_links[:2]
+        res = requests.get(url, headers=headers, timeout=8)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
+            for msg in soup.find_all("div", class_="tgme_widget_message")[:15]:
+                text_div = msg.find("div", class_="tgme_widget_message_text")
+                text = text_div.get_text(separator="\n").strip() if text_div else ""
+                links = extract_shopee_links(text)
+                if links:
+                    # 取第一行或前30字作為標題
+                    title = text.split("\n")[0][:40] + "..." if text else "Telegram 優惠訊息"
+                    results.append({
+                        "platform": f"TG 頻道 ({channel_username})",
+                        "badge_class": "platform-badge-tg",
+                        "title": title,
+                        "source_link": url,
+                        "shopee_links": links
+                    })
     except Exception:
-        return []
+        pass
+    return results
 
-# --- 畫面渲染 ---
-st.markdown("### 🔥 最新蝦皮特賣與折扣商品")
-
-if st.button("🔄 立即重新整理蝦皮雷達", use_container_width=True):
+# --- 畫面操作與重新整理 ---
+if st.button("🔄 立即重新整理全網雷達", use_container_width=True):
     st.cache_data.clear()
 
-with st.spinner("正在同步各大討論區並過濾蝦皮直達與縮址連結..."):
-    deals = fetch_shopee_deals()
+st.markdown("---")
 
-if not deals:
-    st.warning("⚠️ 目前暫時沒有抓到含有蝦皮連結的新文章，請稍後再試或點擊重新整理！")
+with st.spinner("正在同步 PTT、Dcard 與 Telegram，正在全面過濾蝦皮直達商品..."):
+    ptt_results = fetch_ptt_deals()
+    dcard_results = fetch_dcard_deals()
+    tg_results = fetch_telegram_deals("ShopeeDealsTW") # 可自行更換或增加 TG 頻道
+    
+    # 合併所有平台的結果
+    all_deals = ptt_results + dcard_results + tg_results
+
+if not all_deals:
+    st.warning("⚠️ 目前各平台暫時沒有抓到含有蝦皮直達連結的新文章，請點擊上方按鈕重新整理！")
 else:
-    st.markdown(f"### 🎯 成功鎖定 {len(deals)} 筆帶有蝦皮連結的優惠")
-    for item in deals:
+    st.markdown(f"### 🎯 全網同步完成！共鎖定 {len(all_deals)} 筆蝦皮優惠好物")
+    
+    for item in all_deals:
         with st.container():
             st.markdown(f"""
                 <div class="deal-box">
-                    <div><span class="shopee-badge">SHOPEE</span></div>
-                    <div class="ptt-title" style="margin-top: 6px;">{item['title']}</div>
+                    <div><span class="{item['badge_class']}">{item['platform']}</span></div>
+                    <div class="deal-title" style="margin-top: 8px;">{item['title']}</div>
                 </div>
             """, unsafe_allow_html=True)
             
+            # 渲染該文章內抓到的所有蝦皮商品搶購按鈕
             for idx, link in enumerate(item['shopee_links']):
                 st.link_button(f"🔥 點我直接前往蝦皮搶購 (連結 {idx+1})", link, use_container_width=True)
                 
