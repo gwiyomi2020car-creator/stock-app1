@@ -1,12 +1,18 @@
+import requests
 import streamlit as st
 import pandas as pd
 import yfinance as yf
 
+# 建立帶有瀏覽器身份的連線 session（破解雲端 IP 限制）
+session = requests.Session()
+session.headers['User-Agent'] = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like'
+    ' Gecko) Chrome/120.0.0.0 Safari/537.36'
+)
+
 # 頁面基本設定
 st.set_page_config(
-    page_title="台股智慧選股與分析工具",
-    page_icon="📈",
-    layout="wide"
+    page_title="台股智慧選股與分析工具", page_icon="📈", layout="wide"
 )
 
 st.title("📈 實戰台股智慧選股與分析面板")
@@ -27,83 +33,93 @@ stock_dict = {
     "2603.TW": "長榮",
     "3034.TW": "聯詠",
     "2412.TW": "中華電",
-    "2002.TW": "中鋼"
+    "2002.TW": "中鋼",
 }
 
 selected_pool = st.sidebar.multiselect(
     "選擇監控的股票池",
     options=list(stock_dict.keys()),
     default=list(stock_dict.keys())[:8],
-    format_func=lambda x: f"{x} {stock_dict[x]}"
+    format_func=lambda x: f'{x} {stock_dict[x]}',
 )
 
 min_vol = st.sidebar.slider("最低成交量門檻 (張)", 1000, 50000, 3000, step=1000)
-ma_filter = st.sidebar.checkbox("僅顯示 5日線 > 20日線 (多頭排列)", value=True)
+ma_filter = st.sidebar.checkbox(
+    "僅顯示 5日線 > 20日線 (多頭排列)", value=True
+)
 
 # --- 主畫面：執行選股 ---
 if st.button("🚀 開始抓取真實數據並選股", type="primary"):
-    if not selected_pool:
-        st.warning("請至少選擇一支股票！")
-    else:
-        with st.spinner("正在從股市資料庫抓取最新數據並計算指標..."):
-            results = []
-            for ticker in selected_pool:
-                try:
-                    stock = yf.Ticker(ticker)
-                    df = stock.history(period="60d")
-                    
-                    if not df.empty and len(df) >= 20:
-                        close = df['Close'].iloc[-1]
-                        prev_close = df['Close'].iloc[-2]
-                        change_pct = ((close - prev_close) / prev_close) * 100
-                        
-                        ma5 = df['Close'].rolling(window=5).mean().iloc[-1]
-                        ma20 = df['Close'].rolling(window=20).mean().iloc[-1]
-                        vol = df['Volume'].iloc[-1] / 1000
-                        
-                        status = "✅ 多頭排列" if ma5 > ma20 else "⚠️ 盤整或空頭"
-                        
-                        results.append({
-                            "代號": ticker.replace(".TW", ""),
-                            "名稱": stock_dict.get(ticker, ""),
-                            "收盤價": round(close, 2),
-                            "漲跌幅(%)": round(change_pct, 2),
-                            "5日線": round(ma5, 2),
-                            "20日線": round(ma20, 2),
-                            "當日成交量(張)": int(vol),
-                            "狀態": status
-                        })
-                except Exception as e:
-                    pass
-            
-            if results:
-                df_res = pd.DataFrame(results)
-                if ma_filter:
-                    df_res = df_res[df_res['5日線'] > df_res['20日線']]
-                df_res = df_res[df_res['當日成交量(張)'] >= min_vol]
-                
-                st.success(f"篩選完成！共找到 {len(df_res)} 支符合條件的股票。")
-                st.dataframe(df_res, use_container_width=True)
-            else:
-                st.error("目前無法取得數據，可能是網路連線較慢或股市資料尚未更新，請稍後再試。")
+  if not selected_pool:
+    st.warning("請至少選擇一支股票！")
+  else:
+    with st.spinner("正在從股市資料庫抓取最新數據並計算指標..."):
+      results = []
+      for ticker in selected_pool:
+        try:
+          stock = yf.Ticker(ticker, session=session)
+          df = stock.history(period="60d")
+
+          if not df.empty and len(df) >= 20:
+            close = df["Close"].iloc[-1]
+            prev_close = df["Close"].iloc[-2]
+            change_pct = ((close - prev_close) / prev_close) * 100
+
+            ma5 = df["Close"].rolling(window=5).mean().iloc[-1]
+            ma20 = df["Close"].rolling(window=20).mean().iloc[-1]
+            vol = df["Volume"].iloc[-1] / 1000
+
+            status = "✅ 多頭排列" if ma5 > ma20 else "⚠️ 盤整或空頭"
+
+            results.append({
+                "代號": ticker.replace(".TW", ""),
+                "名稱": stock_dict.get(ticker, ""),
+                "收盤價": round(close, 2),
+                "漲跌幅(%)": round(change_pct, 2),
+                "5日線": round(ma5, 2),
+                "20日線": round(ma20, 2),
+                "當日成交量(張)": int(vol),
+                "狀態": status,
+            })
+        except Exception as e:
+          pass
+
+      if results:
+        df_res = pd.DataFrame(results)
+        if ma_filter:
+          df_res = df_res[df_res["5日線"] > df_res["20日線"]]
+        df_res = df_res[df_res["當日成交量(張)"] >= min_vol]
+
+        st.success(f"篩選完成！共找到 {len(df_res)} 支符合條件的股票。")
+        st.dataframe(df_res, use_container_width=True)
+      else:
+        st.error(
+            "目前無法取得數據，可能是網路連線較慢或股市資料尚未更新，請稍後再試。"
+        )
 
 # --- 個股歷史走勢區 ---
 st.markdown("---")
 st.subheader("🔍 個股近三個月走勢圖")
 target_stock = st.selectbox(
-    "選擇要檢視走勢的股票", 
-    options=list(stock_dict.keys()), 
-    format_func=lambda x: f"{x} {stock_dict[x]}"
+    "選擇要檢視走勢的股票",
+    options=list(stock_dict.keys()),
+    format_func=lambda x: f"{x} {stock_dict[x]}",
 )
 
 if st.button("載入技術走勢圖"):
-    with st.spinner(f"正在載入 {target_stock} 走勢..."):
-        try:
-            history_data = yf.Ticker(target_stock).history(period="3m")
-            if not history_data.empty and 'Close' in history_data.columns:
-                st.line_chart(history_data['Close'])
-                st.success(f"已成功載入 {target_stock} ({stock_dict[target_stock]}) 近三個月收盤價曲線。")
-            else:
-                st.error(f"無法取得 {target_stock} 的歷史資料，請重新整理網頁後再試一次。")
-        except Exception as e:
-            st.error("載入走勢圖發生錯誤，請稍後再試。")
+  with st.spinner(f"正在載入 {target_stock} 走勢..."):
+    try:
+      stock = yf.Ticker(target_stock, session=session)
+      history_data = stock.history(period="3m")
+      if not history_data.empty and "Close" in history_data.columns:
+        st.line_chart(history_data["Close"])
+        st.success(
+            f"已成功載入 {target_stock} ({stock_dict[target_stock]})"
+            " 近三個月收盤價曲線。"
+        )
+      else:
+        st.error(
+            f"無法取得 {target_stock} 的歷史資料，請重新整理網頁後再試一次。"
+        )
+    except Exception as e:
+      st.error("載入走勢圖發生錯誤，請稍後再試。")
