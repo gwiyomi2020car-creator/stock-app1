@@ -166,7 +166,8 @@ if st.button("載入技術走勢圖"):
 # --- 🎵 看盤背景音樂區 ---
 st.markdown("---")
 st.markdown("### 🎵 看盤放鬆音樂")
+st.markdown("<p style='font-size: 12px; color: #9CA3AF;'>點擊播放器的 ▶️ 即可開始享受專注放鬆音樂</p>", unsafe_allow_html=True)
 
-# 提供一首免版權的輕音樂/Lo-fi 串流音訊供播放
-audio_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf756.mp3?filename=lofi-study-112191.mp3"
-st.audio(audio_url, format="audio/mp3", autoplay=False)
+# 使用更穩定的公開音訊連結
+audio_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+st.audio(audio_url, format="audio/mp3")
