@@ -1,14 +1,6 @@
-import requests
 import streamlit as st
 import pandas as pd
-import yfinance as yf
-
-# 建立帶有瀏覽器身份的連線 session（解決雲端被擋問題）
-session = requests.Session()
-session.headers['User-Agent'] = (
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like'
-    ' Gecko) Chrome/120.0.0.0 Safari/537.36'
-)
+import twstock
 
 # 頁面基本設定
 st.set_page_config(
@@ -16,24 +8,24 @@ st.set_page_config(
 )
 
 st.title("📈 實戰台股智慧選股與分析面板")
-st.markdown("已串接真實台股數據，結合技術指標與量能條件自動篩選！")
+st.markdown("已串接台股官方資料庫（twstock），結合技術指標與量能條件自動篩選！")
 
 # --- 側邊欄：選股與分析條件設定 ---
 st.sidebar.header("⚙️ 篩選條件設定")
 
 stock_dict = {
-    "2330.TW": "台積電",
-    "2317.TW": "鴻海",
-    "2454.TW": "聯發科",
-    "2308.TW": "台達電",
-    "2382.TW": "廣達",
-    "2881.TW": "富邦金",
-    "2882.TW": "國泰金",
-    "2891.TW": "中信金",
-    "2603.TW": "長榮",
-    "3034.TW": "聯詠",
-    "2412.TW": "中華電",
-    "2002.TW": "中鋼",
+    "2330": "台積電",
+    "2317": "鴻海",
+    "2454": "聯發科",
+    "2308": "台達電",
+    "2382": "廣達",
+    "2881": "富邦金",
+    "2882": "國泰金",
+    "2891": "中信金",
+    "2603": "長榮",
+    "3034": "聯詠",
+    "2412": "中華電",
+    "2002": "中鋼",
 }
 
 selected_pool = st.sidebar.multiselect(
@@ -53,34 +45,37 @@ if st.button("🚀 開始抓取真實數據並選股", type="primary"):
   if not selected_pool:
     st.warning("請至少選擇一支股票！")
   else:
-    with st.spinner("正在從股市資料庫抓取最新數據並計算指標..."):
+    with st.spinner("正在從台股資料庫抓取最新數據並計算指標..."):
       results = []
-      for ticker in selected_pool:
+      for code in selected_pool:
         try:
-          stock = yf.Ticker(ticker, session=session)
-          df = stock.history(period="60d")
+          stock = twstock.Stock(code)
+          if len(stock.price) >= 20:
+            closes = stock.price[-60:]
+            capacities = stock.capacity[-60:]
 
-          if not df.empty and len(df) >= 20:
-            close = df["Close"].iloc[-1]
-            prev_close = df["Close"].iloc[-2]
-            change_pct = ((close - prev_close) / prev_close) * 100
+            if len(closes) >= 20:
+              close = closes[-1]
+              prev_close = closes[-2]
+              change_pct = ((close - prev_close) / prev_close) * 100
 
-            ma5 = df["Close"].rolling(window=5).mean().iloc[-1]
-            ma20 = df["Close"].rolling(window=20).mean().iloc[-1]
-            vol = df["Volume"].iloc[-1] / 1000
+              df_closes = pd.Series(closes)
+              ma5 = df_closes.rolling(window=5).mean().iloc[-1]
+              ma20 = df_closes.rolling(window=20).mean().iloc[-1]
+              vol = int(capacities[-1] / 1000)
 
-            status = "✅ 多頭排列" if ma5 > ma20 else "⚠️ 盤整或空頭"
+              status = "✅ 多頭排列" if ma5 > ma20 else "⚠️ 盤整或空頭"
 
-            results.append({
-                "代號": ticker.replace(".TW", ""),
-                "名稱": stock_dict.get(ticker, ""),
-                "收盤價": round(close, 2),
-                "漲跌幅(%)": round(change_pct, 2),
-                "5日線": round(ma5, 2),
-                "20日線": round(ma20, 2),
-                "當日成交量(張)": int(vol),
-                "狀態": status,
-            })
+              results.append({
+                  "代號": code,
+                  "名稱": stock_dict.get(code, ""),
+                  "收盤價": round(close, 2),
+                  "漲跌幅(%)": round(change_pct, 2),
+                  "5日線": round(ma5, 2),
+                  "20日線": round(ma20, 2),
+                  "當日成交量(張)": vol,
+                  "狀態": status,
+              })
         except Exception as e:
           pass
 
@@ -93,9 +88,7 @@ if st.button("🚀 開始抓取真實數據並選股", type="primary"):
         st.success(f"篩選完成！共找到 {len(df_res)} 支符合條件的股票。")
         st.dataframe(df_res, use_container_width=True)
       else:
-        st.error(
-            "目前無法取得數據，可能是網路連線較慢或股市資料尚未更新，請稍後再試。"
-        )
+        st.error("目前無法取得數據，請稍後再試。")
 
 # --- 個股歷史走勢區 ---
 st.markdown("---")
@@ -109,17 +102,16 @@ target_stock = st.selectbox(
 if st.button("載入技術走勢圖"):
   with st.spinner(f"正在載入 {target_stock} 走勢..."):
     try:
-      stock = yf.Ticker(target_stock, session=session)
-      history_data = stock.history(period="3m")
-      if not history_data.empty and "Close" in history_data.columns:
-        st.line_chart(history_data["Close"])
+      stock = twstock.Stock(target_stock)
+      closes = stock.price[-60:]
+      if len(closes) > 0:
+        df_chart = pd.DataFrame({"Close": closes})
+        st.line_chart(df_chart["Close"])
         st.success(
             f"已成功載入 {target_stock} ({stock_dict[target_stock]})"
-            " 近三個月收盤價曲線。"
+            " 近期收盤價曲線。"
         )
       else:
-        st.error(
-            f"無法取得 {target_stock} 的歷史資料，請重新整理網頁後再試一次。"
-        )
+        st.error(f"無法取得 {target_stock} 的歷史資料。")
     except Exception as e:
       st.error("載入走勢圖發生錯誤，請稍後再試。")
