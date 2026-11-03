@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 
-# 建立帶有瀏覽器身份的連線 session（破解雲端 IP 限制）
+# 建立帶有瀏覽器身份的連線 session（解決雲端被擋問題）
 session = requests.Session()
 session.headers['User-Agent'] = (
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like'
@@ -40,7 +40,7 @@ selected_pool = st.sidebar.multiselect(
     "選擇監控的股票池",
     options=list(stock_dict.keys()),
     default=list(stock_dict.keys())[:8],
-    format_func=lambda x: f'{x} {stock_dict[x]}',
+    format_func=lambda x: f"{x} {stock_dict[x]}",
 )
 
 min_vol = st.sidebar.slider("最低成交量門檻 (張)", 1000, 50000, 3000, step=1000)
