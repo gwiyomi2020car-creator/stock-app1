@@ -69,11 +69,11 @@ st.markdown("""
 st.markdown("""
     <div class="app-header">
         <div class="app-title">🦐 蝦皮專屬 5 折破盤秒殺雷達</div>
-        <div class="app-sub">自動過濾全網討論 ‧ 只抓取蝦皮（Shopee）真實商品直達連結</div>
+        <div class="app-sub">自動過濾全網討論 ‧ 精準鎖定蝦皮（Shopee）商品直達與縮址連結</div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 爬取 PTT 省錢版並「強制只抓蝦皮連結」 ---
+# --- 爬取 PTT 省錢版並支援蝦皮縮址與長網址 ---
 @st.cache_data(ttl=300)
 def fetch_shopee_deals():
     url = "https://www.ptt.cc/bbs/Lifeismoney/index.html"
@@ -98,10 +98,9 @@ def fetch_shopee_deals():
                 title = a_tag.get_text().strip()
                 article_url = "https://www.ptt.cc" + a_tag["href"]
                 
-                # 進入內文抓取，但「只挑出包含 shopee.tw 的連結」
+                # 進入內文抓取，擴大支援 shopee.tw、shp.ee、tw.shp.ee
                 shopee_links = fetch_shopee_links_from_article(article_url, headers)
                 
-                # 只有當這篇文章確實包含蝦皮連結時，才收錄進來
                 if shopee_links:
                     results.append({
                         "title": title,
@@ -112,7 +111,7 @@ def fetch_shopee_deals():
     except Exception:
         return []
 
-# --- 輔助函式：過濾並萃取蝦皮專屬網址 ---
+# --- 輔助函式：過濾並萃取蝦皮專屬與縮址網址 ---
 def fetch_shopee_links_from_article(article_url, headers):
     try:
         res = requests.get(article_url, headers=headers, timeout=5)
@@ -127,11 +126,12 @@ def fetch_shopee_links_from_article(article_url, headers):
         shopee_links = []
         for a in main_content.find_all("a", href=True):
             href = a["href"]
-            # 嚴格篩選：必須包含 shopee.tw 且不能重複
-            if "shopee.tw" in href and href not in shopee_links:
-                shopee_links.append(href)
+            # 同時涵蓋蝦皮標準網址與常見的官方縮址
+            if any(domain in href for domain in ["shopee.tw", "shp.ee", "tw.shp.ee"]):
+                if href not in shopee_links:
+                    shopee_links.append(href)
                 
-        return shopee_links[:2]  # 取前 2 個蝦皮連結
+        return shopee_links[:2]
     except Exception:
         return []
 
@@ -141,13 +141,13 @@ st.markdown("### 🔥 最新蝦皮特賣與折扣商品")
 if st.button("🔄 立即重新整理蝦皮雷達", use_container_width=True):
     st.cache_data.clear()
 
-with st.spinner("正在同步各大討論區並過濾蝦皮直達連結..."):
+with st.spinner("正在同步各大討論區並過濾蝦皮直達與縮址連結..."):
     deals = fetch_shopee_deals()
 
 if not deals:
-    st.warning("⚠️ 目前暫時沒有抓到含有蝦皮直達連結的新文章，請稍後再試或點擊重新整理！")
+    st.warning("⚠️ 目前暫時沒有抓到含有蝦皮連結的新文章，請稍後再試或點擊重新整理！")
 else:
-    st.markdown(f"### 🎯 成功鎖定 {len} 筆帶有蝦皮連結的優惠")
+    st.markdown(f"### 🎯 成功鎖定 {len(deals)} 筆帶有蝦皮連結的優惠")
     for item in deals:
         with st.container():
             st.markdown(f"""
@@ -157,7 +157,6 @@ else:
                 </div>
             """, unsafe_allow_html=True)
             
-            # 直接渲染蝦皮商品的搶購按鈕
             for idx, link in enumerate(item['shopee_links']):
                 st.link_button(f"🔥 點我直接前往蝦皮搶購 (連結 {idx+1})", link, use_container_width=True)
                 
