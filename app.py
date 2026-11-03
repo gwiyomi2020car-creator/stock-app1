@@ -15,7 +15,6 @@ st.markdown("已串接真實台股數據，結合技術指標與量能條件自�
 # --- 側邊欄：選股與分析條件設定 ---
 st.sidebar.header("⚙️ 篩選條件設定")
 
-# 預設台股熱門標的池（代號格式：股票代號.TW）
 stock_dict = {
     "2330.TW": "台積電",
     "2317.TW": "鴻海",
@@ -38,7 +37,6 @@ selected_pool = st.sidebar.multiselect(
     format_func=lambda x: f"{x} {stock_dict[x]}"
 )
 
-# 篩選條件
 min_vol = st.sidebar.slider("最低成交量門檻 (張)", 1000, 50000, 3000, step=1000)
 ma_filter = st.sidebar.checkbox("僅顯示 5日線 > 20日線 (多頭排列)", value=True)
 
@@ -51,20 +49,16 @@ if st.button("🚀 開始抓取真實數據並選股", type="primary"):
             results = []
             for ticker in selected_pool:
                 try:
-                    # 抓取最近 60 天資料
                     stock = yf.Ticker(ticker)
                     df = stock.history(period="60d")
                     
-                    if len(df) >= 20:
+                    if not df.empty and len(df) >= 20:
                         close = df['Close'].iloc[-1]
                         prev_close = df['Close'].iloc[-2]
                         change_pct = ((close - prev_close) / prev_close) * 100
                         
-                        # 計算均線
                         ma5 = df['Close'].rolling(window=5).mean().iloc[-1]
                         ma20 = df['Close'].rolling(window=20).mean().iloc[-1]
-                        
-                        # 計算成交量 (張)
                         vol = df['Volume'].iloc[-1] / 1000
                         
                         status = "✅ 多頭排列" if ma5 > ma20 else "⚠️ 盤整或空頭"
@@ -84,8 +78,6 @@ if st.button("🚀 開始抓取真實數據並選股", type="primary"):
             
             if results:
                 df_res = pd.DataFrame(results)
-                
-                # 套用過濾條件
                 if ma_filter:
                     df_res = df_res[df_res['5日線'] > df_res['20日線']]
                 df_res = df_res[df_res['當日成交量(張)'] >= min_vol]
@@ -93,7 +85,7 @@ if st.button("🚀 開始抓取真實數據並選股", type="primary"):
                 st.success(f"篩選完成！共找到 {len(df_res)} 支符合條件的股票。")
                 st.dataframe(df_res, use_container_width=True)
             else:
-                st.error("無法取得資料，請稍後再試。")
+                st.error("目前無法取得數據，可能是網路連線較慢或股市資料尚未更新，請稍後再試。")
 
 # --- 個股歷史走勢區 ---
 st.markdown("---")
@@ -106,6 +98,12 @@ target_stock = st.selectbox(
 
 if st.button("載入技術走勢圖"):
     with st.spinner(f"正在載入 {target_stock} 走勢..."):
-        history_data = yf.Ticker(target_stock).history(period="3m")
-        st.line_chart(history_data['Close'])
-        st.success(f"已成功載入 {target_stock} ({stock_dict[target_stock]}) 近三個月收盤價曲線。")
+        try:
+            history_data = yf.Ticker(target_stock).history(period="3m")
+            if not history_data.empty and 'Close' in history_data.columns:
+                st.line_chart(history_data['Close'])
+                st.success(f"已成功載入 {target_stock} ({stock_dict[target_stock]}) 近三個月收盤價曲線。")
+            else:
+                st.error(f"無法取得 {target_stock} 的歷史資料，請重新整理網頁後再試一次。")
+        except Exception as e:
+            st.error("載入走勢圖發生錯誤，請稍後再試。")
