@@ -100,3 +100,32 @@ deals = [
     },
     {
         "title": "超強吸力無線手持吸塵器 (下殺3.8折)",
+        "price": "NT$ 680",
+        "origin": "NT$ 1,680",
+        "image": "https://images.unsplash.com/photo-1558317374-067fb5f30001?w=500&auto=format&fit=crop&q=60",
+        "link": "https://shopee.tw"
+    }
+]
+
+st.markdown("### ⚡ 今日 5 折極速搶購清單")
+
+# 透過迴圈排版：圖片 + 商品資訊 + 搶購按鈕
+for item in deals:
+    card_html = f"""
+        <div class="deal-card">
+            <div class="deal-title">{item['title']}</div>
+            <div class="deal-price">{item['price']} <span class="original-price">{item['origin']}</span></div>
+        </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+    
+    # 顯示商品圖片
+    st.image(item['image'], use_container_width=True)
+    
+    # 點擊直接開啟連結
+    st.link_button("🔗 點擊前往蝦皮搶購", item['link'], use_container_width=True)
+    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+
+# --- 側邊欄快速提示 ---
+st.sidebar.markdown("### 💡 使用小撇步")
+st.sidebar.markdown("1. 圖片下方皆附有專屬搶購傳送門。\n2. 點擊後將直接開啟蝦皮，建議提前登入以加快結帳速度！")
