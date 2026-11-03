@@ -2,12 +2,12 @@ import streamlit as st
 
 # 頁面基本設定
 st.set_page_config(
-    page_title="蝦皮 5 折秒殺傳送門",
-    page_icon="🔥",
+    page_title="蝦皮 5 折極速秒殺 App",
+    page_icon="⚡",
     layout="centered"
 )
 
-# --- 注入極簡質感與夜間模式 CSS ---
+# --- 注入現代化夜間 App 風格 CSS ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -15,117 +15,132 @@ st.markdown("""
     header {visibility: hidden;}
     
     .stApp {
-        background-color: #0B0F19;
-        color: #F3F4F6;
+        background-color: #0F172A;
+        color: #F8FAFC;
     }
     
-    .header-card {
-        background: linear-gradient(135deg, #EF4444 0%, #B91C1C 100%);
-        padding: 20px;
+    /* 頂部獨立 App 標題橫幅 */
+    .app-header {
+        background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+        padding: 22px;
         border-radius: 16px;
         text-align: center;
         margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.4);
     }
-    .header-title {
-        font-size: 18px;
+    .app-title {
+        font-size: 20px;
         font-weight: 700;
         color: #FFFFFF;
         margin-bottom: 4px;
     }
-    .header-subtitle {
-        font-size: 12px;
+    .app-sub {
+        font-size: 13px;
         color: #FEE2E2;
     }
 
-    /* 商品卡片設計 */
-    .deal-card {
+    /* 商品獨立卡片 */
+    .deal-box {
         background-color: #1E293B;
-        padding: 15px;
-        border-radius: 12px;
         border: 1px solid #334155;
-        margin-bottom: 15px;
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 12px;
     }
-    .deal-title {
-        font-size: 15px;
-        font-weight: 600;
-        color: #F9FAFB;
-        margin-bottom: 6px;
-    }
-    .deal-price {
-        font-size: 14px;
-        color: #EF4444;
+    .discount-badge {
+        background-color: #EF4444;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
         font-weight: 700;
+        display: inline-block;
         margin-bottom: 8px;
     }
+    .item-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: #F1F5F9;
+        margin-bottom: 8px;
+    }
+    .price-text {
+        font-size: 16px;
+        font-weight: 700;
+        color: #EF4444;
+    }
     .original-price {
-        text-decoration: line-through;
-        color: #9CA3AF;
         font-size: 12px;
+        color: #94A3B8;
+        text-decoration: line-through;
         margin-left: 6px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 頂部 Banner ---
+# --- 頂部 App 標題 ---
 st.markdown("""
-    <div class="header-card">
-        <div class="header-title">🔥 蝦皮 5 折以下秒殺傳送門</div>
-        <div class="header-subtitle">精選全網超殺折扣商品 ‧ 附圖即時搶購</div>
+    <div class="app-header">
+        <div class="app-title">⚡ 蝦皮 5 折以下極速秒殺專區</div>
+        <div class="app-sub">精選全網折扣低於 50% 的破盤神物，點擊直接前往搶購！</div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 含有商品圖片、資訊與連結的清單 ---
+# --- 嚴選 5 折以下的商品清單（附圖片與直達連結） ---
 deals = [
     {
-        "title": "【官方旗艦】無線藍牙降噪耳機 (限時3.3折)",
+        "name": "【官方旗艦】ANC 主動降噪無線藍牙耳機",
         "price": "NT$ 990",
         "origin": "NT$ 2,990",
-        "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=60",
+        "discount": "3.3 折",
+        "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
         "link": "https://shopee.tw"
     },
     {
-        "title": "北歐風簡約實木床頭櫃 (破盤4.4折)",
+        "name": "北歐風簡約實木收納床頭櫃",
         "price": "NT$ 799",
         "origin": "NT$ 1,800",
-        "image": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=500&auto=format&fit=crop&q=60",
+        "discount": "4.4 折",
+        "image": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=600&auto=format&fit=crop&q=80",
         "link": "https://shopee.tw"
     },
     {
-        "title": "大容量石墨烯發熱被 (秒殺4.4折)",
+        "name": "日本石墨烯發熱保暖冬被 (雙人)",
         "price": "NT$ 1,100",
         "origin": "NT$ 2,500",
-        "image": "https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=500&auto=format&fit=crop&q=60",
+        "discount": "4.4 折",
+        "image": "https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=600&auto=format&fit=crop&q=80",
         "link": "https://shopee.tw"
     },
     {
-        "title": "超強吸力無線手持吸塵器 (下殺3.8折)",
+        "name": "車用/家用無線強力吸塵器旗艦版",
         "price": "NT$ 680",
         "origin": "NT$ 1,680",
-        "image": "https://images.unsplash.com/photo-1558317374-067fb5f30001?w=500&auto=format&fit=crop&q=60",
+        "discount": "3.8 折",
+        "image": "https://images.unsplash.com/photo-1558317374-067fb5f30001?w=600&auto=format&fit=crop&q=80",
         "link": "https://shopee.tw"
     }
 ]
 
-st.markdown("### ⚡ 今日 5 折極速搶購清單")
+st.markdown("### 🔥 目前符合條件的 5 折以下商品")
 
-# 透過迴圈排版：圖片 + 商品資訊 + 搶購按鈕
+# 渲染每個商品卡片
 for item in deals:
-    card_html = f"""
-        <div class="deal-card">
-            <div class="deal-title">{item['title']}</div>
-            <div class="deal-price">{item['price']} <span class="original-price">{item['origin']}</span></div>
-        </div>
-    """
-    st.markdown(card_html, unsafe_allow_html=True)
-    
-    # 顯示商品圖片
-    st.image(item['image'], use_container_width=True)
-    
-    # 點擊直接開啟連結
-    st.link_button("🔗 點擊前往蝦皮搶購", item['link'], use_container_width=True)
-    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
-
-# --- 側邊欄快速提示 ---
-st.sidebar.markdown("### 💡 使用小撇步")
-st.sidebar.markdown("1. 圖片下方皆附有專屬搶購傳送門。\n2. 點擊後將直接開啟蝦皮，建議提前登入以加快結帳速度！")
+    with st.container():
+        # 標題與折扣標籤區
+        st.markdown(f"""
+            <div class="deal-box">
+                <span class="discount-badge">🔥 殺到 {item['discount']}</span>
+                <div class="item-name">{item['name']}</div>
+                <div>
+                    <span class="price-text">{item['price']}</span>
+                    <span class="original-price">{item['origin']}</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # 商品圖片
+        st.image(item['image'], use_container_width=True)
+        
+        # 直達搶購按鈕
+        st.link_button("🔗 點我直接前往搶購", item['link'], use_container_width=True)
+        st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
