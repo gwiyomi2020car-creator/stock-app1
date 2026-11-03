@@ -68,63 +68,17 @@ st.markdown("""
 st.markdown("""
     <div class="app-header">
         <div class="app-title">⚡ 全網破盤 5 折秒殺雷達</div>
-        <div class="app-sub">自動同步 Telegram 頻道 & PTT 省錢版 ‧ 即時取得搶購連結</div>
+        <div class="app-sub">自動同步 PTT 省錢版 ‧ 自動萃取文章內商品直達連結</div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 1. 爬取 Telegram 頻道功能 ---
+# --- 爬取 PTT 省錢版文章清單與內文連結 ---
 @st.cache_data(ttl=300)
-def fetch_telegram_deals(channel_username):
-    url = f"https://t.me/s/{channel_username}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    }
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return []
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        messages = soup.find_all("div", class_="tgme_widget_message")
-        
-        results = []
-        for msg in messages:
-            text_div = msg.find("div", class_="tgme_widget_message_text")
-            text = text_div.get_text(separator="\n").strip() if text_div else ""
-            if not text:
-                continue
-
-            photo_div = msg.find("a", class_="tgme_widget_message_photo_wrap")
-            image_url = None
-            if photo_div and "style" in photo_div.attrs:
-                style = photo_div["style"]
-                match = re.search(r"background-image:url\('(.*?)'\)", style)
-                if match:
-                    image_url = match.group(1)
-            
-            links = []
-            if text_div:
-                for a in text_div.find_all("a", href=True):
-                    href = a["href"]
-                    if "t.me" not in href and href.startswith("http"):
-                        links.append(href)
-            
-            results.append({
-                "text": text,
-                "image": image_url,
-                "links": links
-            })
-        return results[::-1]
-    except Exception:
-        return []
-
-# --- 2. 爬取 PTT 省錢版 (Lifeismoney) 功能 ---
-@st.cache_data(ttl=300)
-def fetch_ptt_lifeismoney():
+def fetch_ptt_deals():
     url = "https://www.ptt.cc/bbs/Lifeismoney/index.html"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-        "Cookie": "over18=1"  # 繞過 PTT 18歲同意成年詢問頁面
+        "Cookie": "over18=1"
     }
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -135,74 +89,81 @@ def fetch_ptt_lifeismoney():
         articles = soup.find_all("div", class_="r-ent")
         
         results = []
-        for art in articles:
+        for art in articles[:10]:  # 預設抓取最新 10 篇避免載入過久
             title_div = art.find("div", class_="title")
             a_tag = title_div.find("a") if title_div else None
             
             if a_tag:
                 title = a_tag.get_text().strip()
-                link = "https://www.ptt.cc" + a_tag["href"]
+                article_url = "https://www.ptt.cc" + a_tag["href"]
                 
-                # 簡單過濾，抓取具有雷達價值或全部文章
+                # 點進文章內頁抓取實際商品連結
+                product_links = fetch_ptt_article_links(article_url, headers)
+                
                 results.append({
                     "title": title,
-                    "link": link
+                    "ptt_link": article_url,
+                    "product_links": product_links
                 })
         return results[::-1]
     except Exception:
         return []
 
-# --- 來源選單切換 ---
-source_mode = st.selectbox("選擇資訊來源平台：", ["🔥 PTT 省錢版 (Lifeismoney)", "✈️ Telegram 優惠頻道"])
+# --- 輔助函式：進入 PTT 內頁萃取商品連結 ---
+def fetch_ptt_article_links(article_url, headers):
+    try:
+        res = requests.get(article_url, headers=headers, timeout=5)
+        if res.status_code != 200:
+            return []
+        
+        soup = BeautifulSoup(res.text, "html.parser")
+        main_content = soup.find(id="main-content")
+        if not main_content:
+            return []
+        
+        links = []
+        # 找出內文中的所有超連結
+        for a in main_content.find_all("a", href=True):
+            href = a["href"]
+            # 過濾並保留常見的購物或外部直達連結
+            if any(domain in href for domain in ["shopee.tw", "taobao.com", "tmall.com", "momo.com.tw", " PChome"]):
+                if href not in links:
+                    links.append(href)
+            elif href.startswith("http") and "ptt.cc" not in href:
+                # 其他外部短網址或導購連結
+                if href not in links:
+                    links.append(href)
+                    
+        return links[:3]  # 限制最多抓取前 3 個商品連結
+    except Exception:
+        return []
 
-st.markdown("---")
+# --- 畫面渲染 ---
+st.markdown("### 🏷️ PTT 省錢版即時商品雷達")
 
-if source_mode == "🔥 PTT 省錢版 (Lifeismoney)":
-    st.markdown("### 🏷️ PTT 省錢版最新熱門優惠")
-    with st.spinner("正在同步 PTT 最新省錢文章..."):
-        ptt_deals = fetch_ptt_lifeismoney()
-    
-    if not ptt_deals:
-        st.warning("⚠️ 目前無法取得 PTT 資料，請稍後再試。")
-    else:
-        for item in ptt_deals:
-            with st.container():
-                st.markdown(f"""
-                    <div class="deal-box">
-                        <div class="ptt-title">{item['title']}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-                st.link_button("🔗 點我前往 PTT 看詳細討論與連結", item['link'], use_container_width=True)
-                st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
+if st.button("🔄 立即重新整理", use_container_width=True):
+    st.cache_data.clear()
 
+with st.spinner("正在同步 PTT 省錢版並自動萃取商品直達連結..."):
+    deals = fetch_ptt_deals()
+
+if not deals:
+    st.warning("⚠️ 目前無法取得資料，請稍後再試。")
 else:
-    channel_input = st.text_input("輸入 Telegram 公開頻道 ID:", "ShopeeDealsTW")
-    if st.button("🔄 立即重新整理", use_container_width=True):
-        st.cache_data.clear()
-        
-    if channel_input:
-        with st.spinner(f"正在自動同步 [{channel_input}] 最新情報..."):
-            deals = fetch_telegram_deals(channel_input.strip())
-        
-        if not deals:
-            st.warning("⚠️ 找不到訊息，請確認該頻道為「公開頻道」且 ID 正確。")
-        else:
-            st.markdown(f"### 📢 Telegram 最新抓取優惠 ({len(deals)} 則)")
-            for item in deals:
-                with st.container():
-                    st.markdown(f"""
-                        <div class="deal-box">
-                            <div class="deal-text">{item['text']}</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if item['image']:
-                        st.image(item['image'], use_container_width=True)
-                    
-                    if item['links']:
-                        for link_idx, link_url in enumerate(item['links']):
-                            st.link_button(f"🔗 點我直接搶購 (連結 {link_idx+1})", link_url, use_container_width=True)
-                    else:
-                        st.caption("ℹ️ 此訊息未附帶直接外部連結")
-                        
-                    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+    for item in deals:
+        with st.container():
+            st.markdown(f"""
+                <div class="deal-box">
+                    <div class="ptt-title">{item['title']}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # 如果成功在內文中抓到商品直達連結，直接顯示按鈕
+            if item['product_links']:
+                for idx, prod_link in enumerate(item['product_links']):
+                    st.link_button(f"🔥 點我直接前往商品搶購 (連結 {idx+1})", prod_link, use_container_width=True)
+            else:
+                # 若內文沒直接抓到外部連結，則提供 PTT 原始討論頁面按鈕
+                st.link_button("🔗 前往 PTT 檢視原文與討論", item['ptt_link'], use_container_width=True)
+                
+            st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
