@@ -1,13 +1,16 @@
 import streamlit as st
+import requests
+from bs4 import BeautifulSoup
+import re
 
 # 頁面基本設定
 st.set_page_config(
-    page_title="淘寶 5 折秒殺專區",
-    page_icon="🛍️",
+    page_title="Telegram 限時 5 折秒殺雷達",
+    page_icon="✈️",
     layout="centered"
 )
 
-# --- 注入現代化夜間 App 風格 CSS (淘寶橘紅主題) ---
+# --- 注入現代化夜間 App 風格 CSS ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -20,12 +23,12 @@ st.markdown("""
     }
     
     .app-header {
-        background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+        background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%);
         padding: 22px;
         border-radius: 16px;
         text-align: center;
         margin-bottom: 20px;
-        box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.4);
+        box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.4);
     }
     .app-title {
         font-size: 20px;
@@ -35,7 +38,7 @@ st.markdown("""
     }
     .app-sub {
         font-size: 13px;
-        color: #FFEDD5;
+        color: #E0F2FE;
     }
 
     .deal-box {
@@ -45,119 +48,120 @@ st.markdown("""
         padding: 16px;
         margin-bottom: 12px;
     }
-    .discount-badge {
-        background-color: #F97316;
-        color: white;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 700;
-        display: inline-block;
-        margin-bottom: 8px;
-    }
-    .category-badge {
-        background-color: #3B82F6;
-        color: white;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        display: inline-block;
-        margin-bottom: 8px;
-        margin-left: 4px;
-    }
-    .item-name {
-        font-size: 15px;
-        font-weight: 600;
-        color: #F1F5F9;
-        margin-bottom: 8px;
-    }
-    .price-text {
-        font-size: 16px;
-        font-weight: 700;
-        color: #F97316;
-    }
-    .original-price {
-        font-size: 12px;
-        color: #94A3B8;
-        text-decoration: line-through;
-        margin-left: 6px;
+    .deal-text {
+        font-size: 14px;
+        color: #E2E8F0;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        margin-bottom: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 頂部 App 標題 ---
+# --- 頂部 Banner ---
 st.markdown("""
     <div class="app-header">
-        <div class="app-title">🛍️ 淘寶 5 折以下秒殺專區</div>
-        <div class="app-sub">精選淘寶超殺破盤神物，點擊直接前往官方精準分類頁！</div>
+        <div class="app-title">✈️ Telegram 優惠情報自動雷達</div>
+        <div class="app-sub">自動同步熱門特賣頻道 ‧ 即時取得真實商品連結</div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 淘寶家用品資料庫（已換成正確且可用的淘寶官方分類與搜尋網址） ---
-deals = [
-    {
-        "category": "🛏️ 寢具家飾",
-        "name": "北歐風簡約全棉水洗棉四件套",
-        "price": "RMB 89",
-        "origin": "RMB 220",
-        "discount": "4.0 折",
-        "image": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=600&auto=format&fit=crop&q=80",
-        "link": "https://s.taobao.com/search?q=%E6%B0%B4%E6%B4%97%E6%A3%89%E5%9B%9b%E4%BB%B6%E5%A5%97"  # 淘寶「水洗棉四件套」官方搜尋頁
-    },
-    {
-        "category": "🪑 家具收納",
-        "name": "多功能透明防塵鞋盒（10個裝）",
-        "price": "RMB 45",
-        "origin": "RMB 110",
-        "discount": "4.1 折",
-        "image": "https://images.unsplash.com/photo-1595428774223-ef52624120d2?w=600&auto=format&fit=crop&q=80",
-        "link": "https://s.taobao.com/search?q=%E9%98%B2%E5%A1%B5%E9%9E%8B%E7%9B%92"  # 淘寶「防塵鞋盒」官方搜尋頁
-    },
-    {
-        "category": "🧹 清潔衛浴",
-        "name": "免手洗平底免手洗魔術拖把",
-        "price": "RMB 39",
-        "origin": "RMB 99",
-        "discount": "3.9 折",
-        "image": "https://images.unsplash.com/photo-1585421514284-efb74c2b69ba?w=600&auto=format&fit=crop&q=80",
-        "link": "https://s.taobao.com/search?q=%E5%85%8D%E6%89%8B%E6%B4%97%E6%8B%96%E6%8A%8A"  # 淘寶「免手洗拖把」官方搜尋頁
-    },
-    {
-        "category": "🍽️ 廚房餐飲",
-        "name": "不銹鋼多功能瀝水碗盤收納架",
-        "price": "RMB 59",
-        "origin": "RMB 150",
-        "discount": "3.9 折",
-        "image": "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=600&auto=format&fit=crop&q=80",
-        "link": "https://s.taobao.com/search?q=%E6%BB%A4%E6%B0%B4%E7%A2%97%E7%9B%98%E6%94%B6%E7%BA%B3%E6%9E%B6"  # 淘寶「瀝水碗盤收納架」官方搜尋頁
+# --- 爬蟲核心功能 ---
+@st.cache_data(ttl=300) # 快取 5 分鐘，避免過度頻抓取
+def fetch_telegram_deals(channel_username):
+    url = f"https://t.me/s/{channel_username}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     }
-]
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return []
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        messages = soup.find_all("div", class_="tgme_widget_message")
+        
+        results = []
+        for msg in messages:
+            # 1. 抓取文字內容
+            text_div = msg.find("div", class_="tgme_widget_message_text")
+            text = text_div.get_text(separator="\n").strip() if text_div else ""
+            
+            if not text:
+                continue
 
-# --- 分類篩選 ---
-categories = ["全部", "🛏️ 寢具家飾", "🪑 家具收納", "🧹 清潔衛浴", "🍽️ 廚房餐飲"]
-selected_cat = st.selectbox("選擇淘寶家用品分類：", categories)
+            # 2. 抓取圖片網址
+            photo_div = msg.find("a", class_="tgme_widget_message_photo_wrap")
+            image_url = None
+            if photo_div and "style" in photo_div.attrs:
+                style = photo_div["style"]
+                match = re.search(r"background-image:url\('(.*?)'\)", style)
+                if match:
+                    image_url = match.group(1)
+            
+            # 3. 抓取內容中的所有外部超連結 (真實商品連結)
+            links = []
+            if text_div:
+                for a in text_div.find_all("a", href=True):
+                    href = a["href"]
+                    # 排除 Telegram 內部標籤或無效連結
+                    if "t.me" not in href and href.startswith("http"):
+                        links.append(href)
+            
+            results.append({
+                "text": text,
+                "image": image_url,
+                "links": links
+            })
+            
+        return results[::-1] # 最新訊息排在最前面
+        
+    except Exception as e:
+        st.error(f"連線失敗：{e}")
+        return []
+
+# --- 頻道選擇器（可以自己新增喜歡的 TG 公開頻道帳號） ---
+channels = {
+    "蝦皮/淘寶好康報報 (範例)": "ShopeeDealsTW", # 這裡填入真實 TG 頻道的 ID (不含 @)
+    "自訂頻道": "custom"
+}
+
+channel_input = st.text_input("輸入 Telegram 公開頻道 ID (例如：ShopeeDealsTW):", "ShopeeDealsTW")
+
+if st.button("🔄 立即更新最新好康", use_container_width=True):
+    st.cache_data.clear()
 
 st.markdown("---")
 
-filtered_deals = deals if selected_cat == "全部" else [d for d in deals if d["category"] == selected_cat]
-
-st.markdown(f"### 🔥 符合條件的淘寶好物 ({len(filtered_deals)} 件)")
-
-for item in filtered_deals:
-    with st.container():
-        st.markdown(f"""
-            <div class="deal-box">
-                <span class="discount-badge">🔥 {item['discount']}</span>
-                <span class="category-badge">{item['category']}</span>
-                <div class="item-name">{item['name']}</div>
-                <div>
-                    <span class="price-text">{item['price']}</span>
-                    <span class="original-price">{item['origin']}</span>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+# --- 載入與渲染資料 ---
+if channel_input:
+    with st.spinner("正在自動同步 Telegram 最新情報..."):
+        deals = fetch_telegram_deals(channel_input.strip())
+    
+    if not deals:
+        st.warning("⚠️ 找不到訊息，請確認該頻道為「公開頻道」，且 ID 輸入正確。")
+    else:
+        st.markdown(f"### 📢 最新抓取優惠 ({len(deals)} 則)")
         
-        st.image(item['image'], use_container_width=True)
-        st.link_button("🔗 點我前往淘寶正確搜尋頁", item['link'], use_container_width=True)
-        st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
+        for idx, item in enumerate(deals):
+            with st.container():
+                # 文字與卡片
+                st.markdown(f"""
+                    <div class="deal-box">
+                        <div class="deal-text">{item['text']}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # 若有圖片則顯示圖片
+                if item['image']:
+                    st.image(item['image'], use_container_width=True)
+                
+                # 附帶的真實商品連結
+                if item['links']:
+                    for link_idx, link_url in enumerate(item['links']):
+                        st.link_button(f"🔗 點我直接搶購 (連結 {link_idx+1})", link_url, use_container_width=True)
+                else:
+                    st.caption("ℹ️ 此訊息未附帶直接外部連結")
+                    
+                st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
