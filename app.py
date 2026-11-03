@@ -5,8 +5,8 @@ import re
 
 # 頁面基本設定
 st.set_page_config(
-    page_title="Telegram 限時 5 折秒殺雷達",
-    page_icon="✈️",
+    page_title="Telegram 智慧優惠聚合雷達",
+    page_icon="⚡",
     layout="centered"
 )
 
@@ -61,13 +61,13 @@ st.markdown("""
 # --- 頂部 Banner ---
 st.markdown("""
     <div class="app-header">
-        <div class="app-title">✈️ Telegram 優惠情報自動雷達</div>
-        <div class="app-sub">自動同步熱門特賣頻道 ‧ 即時取得真實商品連結</div>
+        <div class="app-title">⚡ 優惠情報智慧聚合雷達</div>
+        <div class="app-sub">自動同步精選特賣頻道 ‧ 獲取真實商品直達連結</div>
     </div>
 """, unsafe_allow_html=True)
 
 # --- 爬蟲核心功能 ---
-@st.cache_data(ttl=300) # 快取 5 分鐘，避免過度頻抓取
+@st.cache_data(ttl=300)
 def fetch_telegram_deals(channel_username):
     url = f"https://t.me/s/{channel_username}"
     headers = {
@@ -84,14 +84,12 @@ def fetch_telegram_deals(channel_username):
         
         results = []
         for msg in messages:
-            # 1. 抓取文字內容
             text_div = msg.find("div", class_="tgme_widget_message_text")
             text = text_div.get_text(separator="\n").strip() if text_div else ""
             
             if not text:
                 continue
 
-            # 2. 抓取圖片網址
             photo_div = msg.find("a", class_="tgme_widget_message_photo_wrap")
             image_url = None
             if photo_div and "style" in photo_div.attrs:
@@ -100,12 +98,10 @@ def fetch_telegram_deals(channel_username):
                 if match:
                     image_url = match.group(1)
             
-            # 3. 抓取內容中的所有外部超連結 (真實商品連結)
             links = []
             if text_div:
                 for a in text_div.find_all("a", href=True):
                     href = a["href"]
-                    # 排除 Telegram 內部標籤或無效連結
                     if "t.me" not in href and href.startswith("http"):
                         links.append(href)
             
@@ -115,49 +111,51 @@ def fetch_telegram_deals(channel_username):
                 "links": links
             })
             
-        return results[::-1] # 最新訊息排在最前面
+        return results[::-1]
         
     except Exception as e:
-        st.error(f"連線失敗：{e}")
         return []
 
-# --- 頻道選擇器（可以自己新增喜歡的 TG 公開頻道帳號） ---
-channels = {
-    "蝦皮/淘寶好康報報 (範例)": "ShopeeDealsTW", # 這裡填入真實 TG 頻道的 ID (不含 @)
-    "自訂頻道": "custom"
+# --- 預設優質頻道清單（免手動輸入，直接下拉切換） ---
+predefined_channels = {
+    "🔥 預設精選優惠頻道 (ShopeeDealsTW)": "ShopeeDealsTW",
+    "🛒 更多特賣情報頻道 (範例頻道B)": "your_another_channel", # 可自行替換為其他已知公開頻道
+    "✏️ 自訂輸入頻道 ID": "custom"
 }
 
-channel_input = st.text_input("輸入 Telegram 公開頻道 ID (例如：ShopeeDealsTW):", "ShopeeDealsTW")
+selected_option = st.selectbox("選擇要自動同步的頻道來源：", list(predefined_channels.keys()))
 
-if st.button("🔄 立即更新最新好康", use_container_width=True):
+if selected_option == "✏️ 自訂輸入頻道 ID":
+    channel_input = st.text_input("輸入 Telegram 公開頻道 ID:", "ShopeeDealsTW")
+else:
+    channel_input = predefined_channels[selected_option]
+
+if st.button("🔄 立即重新整理", use_container_width=True):
     st.cache_data.clear()
 
 st.markdown("---")
 
-# --- 載入與渲染資料 ---
-if channel_input:
-    with st.spinner("正在自動同步 Telegram 最新情報..."):
+# --- 渲染資料 ---
+if channel_input and channel_input != "your_another_channel":
+    with st.spinner(f"正在自動同步 [{channel_input}] 最新情報..."):
         deals = fetch_telegram_deals(channel_input.strip())
     
     if not deals:
-        st.warning("⚠️ 找不到訊息，請確認該頻道為「公開頻道」，且 ID 輸入正確。")
+        st.warning("⚠️ 暫無資料或該頻道 ID 不存在/非公開頻道。")
     else:
         st.markdown(f"### 📢 最新抓取優惠 ({len(deals)} 則)")
         
         for idx, item in enumerate(deals):
             with st.container():
-                # 文字與卡片
                 st.markdown(f"""
                     <div class="deal-box">
                         <div class="deal-text">{item['text']}</div>
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # 若有圖片則顯示圖片
                 if item['image']:
                     st.image(item['image'], use_container_width=True)
                 
-                # 附帶的真實商品連結
                 if item['links']:
                     for link_idx, link_url in enumerate(item['links']):
                         st.link_button(f"🔗 點我直接搶購 (連結 {link_idx+1})", link_url, use_container_width=True)
@@ -165,3 +163,5 @@ if channel_input:
                     st.caption("ℹ️ 此訊息未附帶直接外部連結")
                     
                 st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+else:
+    st.info("💡 請選擇或輸入一個有效的 Telegram 公開頻道以開始自動抓取。")
